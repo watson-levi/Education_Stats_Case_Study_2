@@ -1,0 +1,165 @@
+---
+title: "wearWhatYouLike"
+output: html_document
+date: "2023-02-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readxl)
+c97 <- read_excel("c97.xlsx")
+```
+
+```{r Data Cleaning}
+library(tidyverse)
+clothing <- c97 %>%
+  mutate(id = ceiling(row_number() / 2), clothing = as.factor(clothing), gender = as.factor(gender), count = as.numeric(replace(count, count == '.', '0')), itype = as.factor(itype))
+
+
+clothing2 <- clothing %>%
+  pivot_wider(id_cols = c(id, gender, clothing), names_from = itype, values_from = count) %>%
+  mutate(totalinter = PosInt + Reproof)
+
+```
+
+```{r Exploratory Analysis}
+
+hist(clothing$count)
+
+ggplot(data = clothing2, mapping = aes(x = clothing))+geom_bar()+labs(title = 'Occurances of Clothing Type', x = 'Clothing Type', y = 'Count')
+
+ggplot(data = clothing2, mapping = aes(x = gender))+geom_bar()+labs(title = 'Occurances of each Gender', x = 'Gender', y = 'Count')
+ggplot(data = clothing, mapping = aes(x = itype))+geom_bar()+labs(title = 'Occurances of each Interaction Type', x = 'Interaction Type', y = 'Count')
+
+```
+
+
+```{r goodness of fit}
+
+#interactions the same proportion by gender?
+
+clothingrows <- nrow(clothing)
+sumcounts = sum(clothing$count)
+
+genderprop <- clothing %>%
+  group_by(gender) %>%
+  summarize(`Actual Count` = sum(count), expectedfreq = n(), expectedprop = (n() / clothingrows), `Expected Count` = sumcounts*expectedprop)
+
+print('Is number of interactions different based on gender?')
+chisq.test(x = genderprop$`Actual Count`, p = genderprop$expectedprop)
+
+genderfreqs <- genderprop %>%
+  select(gender, `Actual Count`, `Expected Count`) %>%
+  pivot_longer(cols = c(`Actual Count`, `Expected Count`), values_to = 'freqs', names_to = 'expect')
+
+ggplot(data = genderfreqs, mapping = aes(gender, freqs, fill = expect))+
+  geom_col(position = 'dodge')+
+  labs(title = 'Actual vs. Expected Number of Interactions By Gender', x = 'Gender', y = 'Number of Interactions', fill = 'Actual vs. Expected')
+
+
+
+#Interactions the same by clothing
+
+
+
+clothingprop <- clothing %>%
+  group_by(clothing) %>%
+  summarize(`Actual Count` = sum(count), expectedfreq = n(), expectedprop = (n() / clothingrows), `Expected Count` = sumcounts*expectedprop)
+
+print('Is number of interactions different based on clothing?')
+
+chisq.test(x = clothingprop$`Actual Count`, p = clothingprop$expectedprop)
+
+clothingfreqs <- clothingprop %>%
+  select(clothing, `Actual Count`, `Expected Count`) %>%
+  pivot_longer(cols = c(`Actual Count`, `Expected Count`), values_to = 'freqs', names_to = 'expect')
+
+ggplot(data = clothingfreqs, aes(clothing, freqs, fill = expect))+
+  geom_col(position = 'dodge')+
+  labs(title = 'Actual vs. Expected Number of Interactions By Clothing', x = 'Clothing', y = 'Number of Interactions', fill = 'Actual vs. Expected')
+
+
+
+
+#Interactions the same by itype
+
+
+
+itypeprop <- clothing %>%
+  group_by(itype) %>%
+  summarize(`Actual Count` = sum(count), expectedfreq = n(), expectedprop = (n() / clothingrows), `Expected Count` = sumcounts*expectedprop)
+
+print('Is number of interactions different based on interaction type?')
+chisq.test(x = itypeprop$`Actual Count`, p = itypeprop$expectedprop)
+
+itypefreqs <- itypeprop %>%
+  select(itype, `Actual Count`, `Expected Count`) %>%
+  pivot_longer(cols = c(`Actual Count`, `Expected Count`), values_to = 'freqs', names_to = 'expect')
+
+ggplot(data = itypefreqs, aes(itype, freqs, fill = expect))+
+  geom_col(position = 'dodge')+
+    labs(title = 'Actual vs. Expected Number of Interactions By Interaction Type', x = 'Interaction Type', y = 'Number of Interactions', fill = 'Actual vs. Expected')
+
+
+```
+
+
+```{r test of independence}
+
+#gender by itype
+
+genderitype <- clothing %>%
+  group_by(itype, gender) %>%
+  summarize(freq = sum(count))
+
+genderitypematrix <- as.table(matrix(genderitype$freq, nrow = 2, dimnames = list(c('female', 'male'), c('PosInt', 'Reproof'))))
+
+print('Does Gender affect Interaction Type?')
+chisq.test(genderitypematrix)
+
+library(ggmosaic)
+p1 <- ggplot(data = clothing)+
+  geom_mosaic(aes(x = product(itype, gender), fill = gender, weight = count), show.legend = FALSE)+
+  labs(title = 'Interaction Type by Gender', x = 'Gender', y = 'Interaction Type')
+
+mosaicLabs(p1)
+ 
+ 
+#clothing by itype
+
+clothingitype <- clothing %>%
+  group_by(itype, clothing) %>%
+  summarize(freq = sum(count))
+
+clothingitypematrix <- as.table(matrix(clothingitype$freq, nrow = 3, dimnames = list(c('Other', 'Std', 'Unisex'), c('PosInt', 'Reproof'))))
+
+print('Does Clothing affect Interaction Type?')
+chisq.test(clothingitypematrix)
+
+p2 <- ggplot(data = clothing)+
+  geom_mosaic(aes(x = product(itype, clothing), fill = clothing, weight = count))+
+  labs(title = 'Interaction Type by Clothing', x = 'Clothing Type', y = 'Interaction Type')
+
+mosaicLabs(p2)
+
+#gender by clothing
+
+
+print('Does Gender affect Clothing Choice?')
+
+chisq.test(clothing2$gender, clothing2$clothing)
+
+p3 <- ggplot(data = clothing2)+
+  geom_mosaic(aes(x=product(clothing, gender), fill = gender))+
+  labs(title = 'Clothing Type by Gender', x = 'Gender', y = 'Clothing Type')
+
+mosaicLabs(p3)
+
+
+
+
+```
+
